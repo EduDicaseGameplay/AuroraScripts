@@ -1,6 +1,6 @@
-scriptTitle = "Homebrew Store"
+﻿scriptTitle = "Homebrew Store"
 scriptAuthor = "Derf / Cheato / Eduardo Henrique"
-scriptVersion = 6
+scriptVersion = 6.1
 scriptDescription = "Download homebrew from ConsoleMods.org and other repos! (Optimized Version)"
 scriptIcon = "icon.png"
 scriptPermissions = { "http", "sql", "filesystem" }
@@ -136,14 +136,38 @@ local function SavePreferredDrive(mountPoint)
 	end
 end
 
+-- Keep Aurora's native drive list intact, but expose OnBoardMU when Aurora can
+-- access its root and does not include it in GetDrives(true).
+local function GetContentDrives()
+	local drives = FileSystem.GetDrives(true) or {};
+	local hasOnBoardMU = false;
+
+	for _, d in ipairs(drives) do
+		if d.MountPoint ~= nil then
+			local cleanDrive = string.lower(d.MountPoint:gsub("[:\\/]", ""));
+			if cleanDrive == "onboardmu" then
+				hasOnBoardMU = true;
+				break;
+			end
+		end
+	end
+
+	-- Match the root-path check already used elsewhere in this script for Usb0.
+	if not hasOnBoardMU and FileSystem.FileExists("OnBoardMU:\\") then
+		table.insert(drives, { MountPoint = "OnBoardMU:", Name = "On-board Memory Unit" });
+	end
+
+	return drives;
+end
+
 local function GetPreferredDrive()
 	local prefMount = LoadPreferredDrive();
 	if prefMount ~= nil and prefMount ~= "" then
 		-- Normalize drive string (e.g. "Hdd1:\", "Hdd1:", "Hdd1" -> "hdd1")
 		local cleanPref = string.lower(prefMount:gsub("[:\\/]", ""));
-		local drives = FileSystem.GetDrives(true);
-		if drives ~= nil then
-			for _, d in ipairs(drives) do
+		local drives = GetContentDrives();
+		for _, d in ipairs(drives) do
+			if d.MountPoint ~= nil then
 				local cleanD = string.lower(d.MountPoint:gsub("[:\\/]", ""));
 				if cleanD == cleanPref then
 					return d;
@@ -161,7 +185,7 @@ function PromptContentDrive()
 		return pref;
 	end
 
-	local drives = FileSystem.GetDrives(true); -- Content-capable drives only
+	local drives = GetContentDrives(); -- Aurora content drives plus accessible OnBoardMU
 	local names = {};
 
 	for i, d in ipairs(drives) do
@@ -322,7 +346,7 @@ function DoShowMenu(menu)
 				return
 			elseif (ret.action == "set_storage") then
 				-- Select and persist preferred storage drive
-				local drives = FileSystem.GetDrives(true);
+				local drives = GetContentDrives();
 				local names = { "Ask every time (Default)" };
 				for i, d in ipairs(drives) do
 					local label = d.MountPoint;
@@ -796,3 +820,5 @@ function CopyProgressRoutine(dwTotalFileSize, dwTotalBytesTransferred)
 	Script.SetProgress(dwTotalBytesTransferred, dwTotalFileSize);
 	return 0;
 end
+
+
